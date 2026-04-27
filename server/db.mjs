@@ -637,7 +637,7 @@ export function getDatabaseHealth() {
       ok: initialized && !initError && !lastPersistError,
       mode: 'postgres',
       file: null,
-      quickCheck: initialized ? 'connected' : 'not-initialized',
+      quickCheck: initialized ? 'ok' : 'not-initialized',
       error: initError ?? lastPersistError ?? null,
       lastPersistedAt,
     }
