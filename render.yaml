@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: mueyyensayt
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/ready
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: PUBLIC_BASE_URL
+        fromService:
+          type: web
+          name: mueyyensayt
+          property: url
+      - key: APP_ORIGIN
+        fromService:
+          type: web
+          name: mueyyensayt
+          property: url
+      - key: COOKIE_SAME_SITE
+        value: Lax
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: DB_PATH
+        value: /var/data/app.sqlite
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: VITE_GOOGLE_MAPS_API_KEY
+        sync: false
+    disks:
+      - name: mueyyensayt-data
+        mountPath: /var/data
+        sizeGB: 1
