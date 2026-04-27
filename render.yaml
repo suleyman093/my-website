@@ -27,12 +27,8 @@ services:
       - key: COOKIE_SECURE
         value: "true"
       - key: DB_PATH
-        value: /var/data/app.sqlite
+        value: /tmp/app.sqlite
       - key: GOOGLE_MAPS_API_KEY
         sync: false
       - key: VITE_GOOGLE_MAPS_API_KEY
         sync: false
-    disks:
-      - name: mueyyensayt-data
-        mountPath: /var/data
-        sizeGB: 1
