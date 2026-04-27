@@ -16,6 +16,7 @@
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",
     "leaflet": "^1.9.4",
+    "pg": "^8.20.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-leaflet": "^5.0.0",

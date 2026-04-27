@@ -5,6 +5,7 @@ import { extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   getDatabaseHealth,
+  initializeDatabase,
   loadMatchResults,
   loadParties,
   loadSessions,
@@ -2214,7 +2215,16 @@ setInterval(() => {
   }
 }, 5000)
 
-server.listen(port, () => {
-  logRuntimeChecks()
-  console.log(`Mueyyensayt API listening on ${publicBaseUrl}`)
+async function startServer() {
+  await initializeDatabase()
+
+  server.listen(port, () => {
+    logRuntimeChecks()
+    console.log(`Mueyyensayt API listening on ${publicBaseUrl}`)
+  })
+}
+
+startServer().catch((error) => {
+  console.error('Failed to start Mueyyensayt server:', error)
+  process.exit(1)
 })
