@@ -13,15 +13,9 @@ services:
       - key: PORT
         value: 10000
       - key: PUBLIC_BASE_URL
-        fromService:
-          type: web
-          name: mueyyensayt
-          property: url
+        sync: false
       - key: APP_ORIGIN
-        fromService:
-          type: web
-          name: mueyyensayt
-          property: url
+        sync: false
       - key: COOKIE_SAME_SITE
         value: Lax
       - key: COOKIE_SECURE
