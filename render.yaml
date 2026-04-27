@@ -2,7 +2,7 @@ services:
   - type: web
     name: mueyyensayt
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm ci && npm run build
     startCommand: npm run start
     healthCheckPath: /api/ready
