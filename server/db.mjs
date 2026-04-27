@@ -55,10 +55,19 @@ db.exec(`
   );
 `)
 
-function safeReadJson(path, fallback) {
-  if (!existsSync(path)) {
-    return fallback
+function runTransaction(callback) {
+  db.exec('BEGIN')
+  try {
+    callback()
+    db.exec('COMMIT')
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
   }
+}
+
+function safeReadJson(path, fallback) {
+  if (!existsSync(path)) return fallback
 
   try {
     return JSON.parse(readFileSync(path, 'utf8'))
@@ -120,15 +129,18 @@ export function saveUsers(users) {
     `,
   )
 
-  db.exec("BEGIN");
-    try {
-      // keep the code that saves users here
-    
-      db.exec("COMMIT");
-    } catch (error) {
-      db.exec("ROLLBACK");
-      throw error;
+  runTransaction(() => {
+    clear.run()
+    for (const user of users) {
+      insert.run(
+        user.id,
+        user.email,
+        user.passwordHash,
+        user.displayName,
+        user.createdAt,
+      )
     }
+  })
 }
 
 export function loadSessions() {
@@ -158,9 +170,9 @@ export function saveSessions(sessions) {
     `,
   )
 
-  db.transaction((nextSessions) => {
+  runTransaction(() => {
     clear.run()
-    for (const session of nextSessions) {
+    for (const session of sessions) {
       insert.run(
         session.id,
         JSON.stringify(session.user),
@@ -168,7 +180,7 @@ export function saveSessions(sessions) {
         session.updatedAt,
       )
     }
-  })(sessions)
+  })
 }
 
 export function loadParties() {
@@ -194,9 +206,9 @@ export function saveParties(parties) {
     `,
   )
 
-  db.transaction((nextParties) => {
+  runTransaction(() => {
     clear.run()
-    for (const party of nextParties) {
+    for (const party of parties) {
       insert.run(
         party.code,
         party.leaderId,
@@ -205,7 +217,7 @@ export function saveParties(parties) {
         party.updatedAt,
       )
     }
-  })(parties)
+  })
 }
 
 export function loadMatchResults() {
@@ -257,9 +269,9 @@ export function saveMatchResults(results) {
     `,
   )
 
-  db.transaction((nextResults) => {
+  runTransaction(() => {
     clear.run()
-    for (const result of nextResults) {
+    for (const result of results) {
       insert.run(
         result.id,
         result.userId,
@@ -271,7 +283,7 @@ export function saveMatchResults(results) {
         result.playedAt,
       )
     }
-  })(results)
+  })
 }
 
 migrateLegacyDataIfNeeded()
