@@ -120,18 +120,15 @@ export function saveUsers(users) {
     `,
   )
 
-  db.transaction((nextUsers) => {
-    clear.run()
-    for (const user of nextUsers) {
-      insert.run(
-        user.id,
-        user.email,
-        user.passwordHash,
-        user.displayName,
-        user.createdAt,
-      )
+  db.exec("BEGIN");
+    try {
+      // keep the code that saves users here
+    
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
     }
-  })(users)
 }
 
 export function loadSessions() {
