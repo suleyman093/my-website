@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 import { useEffect } from 'react'
-import { loadCurrentAppState } from '../lib/auth'
+import { loadCurrentAppState, requestPasswordReset, resetPasswordWithToken } from '../lib/auth'
 import {
   buildFinalMatchStateFromParty,
   buildGameRouteStateFromParty,
@@ -14,12 +14,18 @@ type AuthView = 'login' | 'register'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, login, register, continueAsGuest, logout } = useAuth()
   const [view, setView] = useState<AuthView>('login')
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotMode, setForgotMode] = useState(false)
+  const resetToken = new URLSearchParams(location.search).get('reset')?.trim() ?? ''
 
   useEffect(() => {
     if (!user) {
@@ -76,11 +82,14 @@ export function LoginPage() {
     setDisplayName('')
     setEmail('')
     setPassword('')
+    setConfirmPassword('')
+    setForgotEmail('')
   }
 
   async function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    setInfo(null)
 
     try {
       await login({ email, password })
@@ -93,6 +102,7 @@ export function LoginPage() {
   async function handleRegisterSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    setInfo(null)
 
     if (!displayName.trim()) {
       setError('Please choose a display name.')
@@ -118,11 +128,50 @@ export function LoginPage() {
 
   async function handleGuestStart() {
     setError(null)
+    setInfo(null)
     try {
       await continueAsGuest()
       navigate('/play')
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Guest start failed.')
+    }
+  }
+
+  async function handleForgotPasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError(null)
+    setInfo(null)
+
+    try {
+      await requestPasswordReset(forgotEmail)
+      setInfo('If that email exists, a reset link has been sent.')
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Could not send reset email.')
+    }
+  }
+
+  async function handleResetPasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError(null)
+    setInfo(null)
+
+    if (!password.trim()) {
+      setError('Please enter a new password.')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    try {
+      await resetPasswordWithToken({ token: resetToken, password })
+      setInfo('Password updated. You can log in now.')
+      setPassword('')
+      setConfirmPassword('')
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Could not reset password.')
     }
   }
 
@@ -153,6 +202,80 @@ export function LoginPage() {
                 Log out
               </button>
             </div>
+          </section>
+        ) : resetToken ? (
+          <section className="auth-panel">
+            <div className="auth-panel-copy">
+              <span className="auth-panel-label">Reset access</span>
+              <strong>Choose a new password</strong>
+            </div>
+
+            <form className="auth-form" onSubmit={handleResetPasswordSubmit}>
+              <label className="auth-field">
+                <span>New password</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter a new password"
+                />
+              </label>
+
+              <label className="auth-field">
+                <span>Confirm password</span>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="Repeat the new password"
+                />
+              </label>
+
+              {error ? <p className="auth-error">{error}</p> : null}
+              {info ? <p className="auth-success">{info}</p> : null}
+
+              <div className="hero-actions auth-actions">
+                <button type="submit">Update password</button>
+              </div>
+            </form>
+          </section>
+        ) : forgotMode ? (
+          <section className="auth-panel">
+            <div className="auth-panel-copy">
+              <span className="auth-panel-label">Reset access</span>
+              <strong>Forgot your password?</strong>
+              <p>Enter your email and we’ll send you a reset link.</p>
+            </div>
+
+            <form className="auth-form" onSubmit={handleForgotPasswordSubmit}>
+              <label className="auth-field">
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(event) => setForgotEmail(event.target.value)}
+                  placeholder="you@example.com"
+                />
+              </label>
+
+              {error ? <p className="auth-error">{error}</p> : null}
+              {info ? <p className="auth-success">{info}</p> : null}
+
+              <div className="hero-actions auth-actions">
+                <button type="submit">Send reset link</button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => {
+                    setForgotMode(false)
+                    setError(null)
+                    setInfo(null)
+                  }}
+                >
+                  Back to login
+                </button>
+              </div>
+            </form>
           </section>
         ) : (
           <>
@@ -227,12 +350,27 @@ export function LoginPage() {
                   </label>
 
                   {error ? <p className="auth-error">{error}</p> : null}
+                  {info ? <p className="auth-success">{info}</p> : null}
 
                   <div className="hero-actions auth-actions">
                     <button type="submit">
                       {view === 'login' ? 'Log in' : 'Create account'}
                     </button>
                   </div>
+
+                  {view === 'login' ? (
+                    <button
+                      type="button"
+                      className="auth-inline-link"
+                      onClick={() => {
+                        setForgotMode(true)
+                        setError(null)
+                        setInfo(null)
+                      }}
+                    >
+                      Forgot your password?
+                    </button>
+                  ) : null}
                 </form>
               </section>
 

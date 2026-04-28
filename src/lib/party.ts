@@ -333,6 +333,14 @@ export async function advancePartyMatch(code: string, leaderId: string) {
   return payload.party
 }
 
+export async function resetPartyToLobby(code: string) {
+  const payload = await requestJson<{ party: Party }>('/parties/reset', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  })
+  return payload.party
+}
+
 export async function getPartyRevealSnapshot(code: string) {
   const payload = await requestJson<{ snapshot: RevealSnapshot }>(`/parties/${code.trim().toUpperCase()}/reveal`)
   return payload.snapshot

@@ -67,6 +67,17 @@ export function buildResultRouteStateFromParty(party: Party, userId: string | un
 }
 
 export function buildFinalMatchStateFromParty(party: Party, userId: string | undefined) {
+  const totalScores = party.activeMatch?.totalScores ?? {}
+  const finalPlacements = party.members
+    .map((member) => ({
+      userId: member.userId,
+      displayName: member.displayName,
+      team: member.team,
+      totalScore: totalScores[member.userId] ?? 0,
+      isCurrentUser: member.userId === userId,
+    }))
+    .sort((left, right) => right.totalScore - left.totalScore)
+
   return {
     matchId: party.activeMatch?.matchId ?? generateMatchId(),
     totalScore: party.activeMatch?.totalScores[userId ?? ''] ?? 0,
@@ -78,5 +89,6 @@ export function buildFinalMatchStateFromParty(party: Party, userId: string | und
     teamWinner: party.activeMatch?.winnerTeam ?? null,
     teamPoints: party.activeMatch?.teamPoints ?? null,
     partyCode: party.code,
+    finalPlacements,
   }
 }

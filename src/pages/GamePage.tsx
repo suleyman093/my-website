@@ -244,6 +244,7 @@ export function GamePage() {
   }, [party?.chatMessages, partyCode])
 
   const activeMatch = party?.activeMatch ?? null
+  const chatPreferenceKey = `myn-chat-hidden:${activeMatch?.matchId ?? partyCode ?? 'solo-current'}`
   const currentRound = activeMatch?.currentRound ?? settings.currentRound ?? 1
   const totalRounds = Number(activeMatch?.roundCount ?? settings.roundCount)
   const runningTotalScore =
@@ -295,6 +296,21 @@ export function GamePage() {
         activeMatch?.submissions.some((submission) => submission.userId === user?.id),
       )
     : submitted
+
+  useEffect(() => {
+    try {
+      const savedValue = window.sessionStorage.getItem(chatPreferenceKey)
+      setChatHidden(savedValue === 'true')
+    } catch {
+      setChatHidden(false)
+    }
+  }, [chatPreferenceKey])
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(chatPreferenceKey, String(chatHidden))
+    } catch {}
+  }, [chatHidden, chatPreferenceKey])
 
   useEffect(() => {
     setGuess(null)
@@ -647,7 +663,7 @@ export function GamePage() {
 
         <div className="guess-ui">
           <div className="mini-map-card">
-            <GuessMiniMap onGuessChange={setGuess} />
+            <GuessMiniMap onGuessChange={setGuess} locked={hasSubmitted || timeLeft === 0} />
           </div>
 
           <button

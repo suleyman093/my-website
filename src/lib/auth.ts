@@ -171,6 +171,19 @@ export async function loadLeaderboardEntries(windowKey: 'daily' | 'monthly' | 'a
   }
 }
 
+export async function requestPasswordReset(email: string) {
+  await requestAuth<{ ok: true; message: string }>('/auth/forgot-password', {
+    email,
+  })
+}
+
+export async function resetPasswordWithToken(input: {
+  token: string
+  password: string
+}) {
+  await requestAuth<{ ok: true; message: string }>('/auth/reset-password', input)
+}
+
 export function generateMatchId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `MATCH-${crypto.randomUUID().slice(0, 8).toUpperCase()}`

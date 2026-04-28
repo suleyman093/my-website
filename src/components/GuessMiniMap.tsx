@@ -5,12 +5,14 @@ import { loadGoogleMaps } from '../lib/googleMapsLoader'
 
 type GuessMiniMapProps = {
   onGuessChange?: (coords: { lat: number; lng: number } | null) => void
+  locked?: boolean
 }
 
-export function GuessMiniMap({ onGuessChange }: GuessMiniMapProps) {
+export function GuessMiniMap({ onGuessChange, locked = false }: GuessMiniMapProps) {
   const mapRef = useRef<HTMLDivElement | null>(null)
   const googleMapRef = useRef<google.maps.Map | null>(null)
   const markerRef = useRef<google.maps.Marker | null>(null)
+  const lockedRef = useRef(locked)
   const [mapError, setMapError] = useState<string | null>(null)
 
   function toRoundedPosition(latLng: google.maps.LatLng) {
@@ -19,6 +21,13 @@ export function GuessMiniMap({ onGuessChange }: GuessMiniMapProps) {
       lng: Number(latLng.lng().toFixed(5)),
     }
   }
+
+  useEffect(() => {
+    lockedRef.current = locked
+    if (markerRef.current) {
+      markerRef.current.setDraggable(!locked)
+    }
+  }, [locked])
 
   useEffect(() => {
     let cancelled = false
@@ -65,6 +74,10 @@ export function GuessMiniMap({ onGuessChange }: GuessMiniMapProps) {
         googleMapRef.current = map
 
         map.addListener('click', (event: google.maps.MapMouseEvent) => {
+          if (lockedRef.current) {
+            return
+          }
+
           if (!event.latLng) {
             return
           }
@@ -75,7 +88,7 @@ export function GuessMiniMap({ onGuessChange }: GuessMiniMapProps) {
             markerRef.current = new google.maps.Marker({
               position,
               map,
-              draggable: true,
+              draggable: !lockedRef.current,
               icon: {
                 path: google.maps.SymbolPath.CIRCLE,
                 scale: 9,
@@ -87,6 +100,10 @@ export function GuessMiniMap({ onGuessChange }: GuessMiniMapProps) {
             })
 
             markerRef.current.addListener('dragend', () => {
+              if (lockedRef.current) {
+                return
+              }
+
               const markerPosition = markerRef.current?.getPosition()
 
               if (!markerPosition) {

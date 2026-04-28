@@ -1,7 +1,7 @@
 /// <reference types="google.maps" />
 
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 import { generateMatchId, loadCurrentAppState } from '../lib/auth'
 import {
@@ -9,6 +9,7 @@ import {
   formatTeamName,
   getParty,
   getPartyRevealSnapshot,
+  leaveParty,
   subscribeToParty,
 } from '../lib/party'
 import type { Party, PartyMember, PartyTargetView } from '../lib/party'
@@ -503,6 +504,14 @@ export function ResultPage() {
     })
   }
 
+  async function handleGoHome() {
+    if (isPartyMatch && partyCode && user) {
+      await leaveParty(partyCode, user.id)
+    }
+
+    navigate('/')
+  }
+
   return (
     <main className="app-shell home-screen result-screen">
       <div className="home-stars" aria-hidden="true" />
@@ -710,9 +719,9 @@ export function ResultPage() {
             </button>
           )}
 
-          <Link to="/" className="button-link secondary">
+          <button type="button" className="button-link secondary" onClick={() => void handleGoHome()}>
             Home
-          </Link>
+          </button>
         </div>
       </section>
     </main>

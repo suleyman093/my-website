@@ -1,8 +1,9 @@
 import { createServer } from 'node:http'
-import { randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import nodemailer from 'nodemailer'
 import {
   getDatabaseHealth,
   initializeDatabase,
@@ -80,38 +81,32 @@ const guestNouns = [
   'Beacon',
 ]
 
-const seededLeaderboardData = {
-  daily: [
-    { name: 'Selin', country: 'TR', score: 24280, winRate: 81, roundsPlayed: 26, streak: 6 },
-    { name: 'Noah', country: 'BE', score: 23810, winRate: 79, roundsPlayed: 24, streak: 5 },
-    { name: 'Mira', country: 'JO', score: 23140, winRate: 76, roundsPlayed: 23, streak: 4 },
-    { name: 'Emir', country: 'DE', score: 22710, winRate: 74, roundsPlayed: 22, streak: 4 },
-    { name: 'Lina', country: 'SE', score: 22440, winRate: 72, roundsPlayed: 21, streak: 3 },
-    { name: 'Kai', country: 'JP', score: 21980, winRate: 68, roundsPlayed: 20, streak: 2 },
-    { name: 'Nora', country: 'FR', score: 21760, winRate: 67, roundsPlayed: 19, streak: 2 },
-    { name: 'Yusuf', country: 'NL', score: 21490, winRate: 65, roundsPlayed: 18, streak: 2 },
-  ],
-  monthly: [
-    { name: 'Mira', country: 'JO', score: 106420, winRate: 78, roundsPlayed: 114, streak: 12 },
-    { name: 'Selin', country: 'TR', score: 104980, winRate: 77, roundsPlayed: 112, streak: 11 },
-    { name: 'Noah', country: 'BE', score: 101730, winRate: 75, roundsPlayed: 109, streak: 9 },
-    { name: 'Talia', country: 'US', score: 99880, winRate: 73, roundsPlayed: 108, streak: 8 },
-    { name: 'Lina', country: 'SE', score: 97240, winRate: 71, roundsPlayed: 103, streak: 7 },
-    { name: 'Emir', country: 'DE', score: 95820, winRate: 69, roundsPlayed: 101, streak: 7 },
-    { name: 'Rami', country: 'AE', score: 93450, winRate: 68, roundsPlayed: 97, streak: 5 },
-    { name: 'Nora', country: 'FR', score: 91890, winRate: 66, roundsPlayed: 95, streak: 4 },
-  ],
-  'all-time': [
-    { name: 'Noah', country: 'BE', score: 524110, winRate: 74, roundsPlayed: 522, streak: 19 },
-    { name: 'Mira', country: 'JO', score: 517980, winRate: 73, roundsPlayed: 516, streak: 16 },
-    { name: 'Selin', country: 'TR', score: 506430, winRate: 72, roundsPlayed: 509, streak: 15 },
-    { name: 'Lina', country: 'SE', score: 492660, winRate: 69, roundsPlayed: 494, streak: 14 },
-    { name: 'Emir', country: 'DE', score: 488320, winRate: 69, roundsPlayed: 489, streak: 12 },
-    { name: 'Talia', country: 'US', score: 471240, winRate: 67, roundsPlayed: 478, streak: 11 },
-    { name: 'Kai', country: 'JP', score: 463180, winRate: 66, roundsPlayed: 470, streak: 10 },
-    { name: 'Rami', country: 'AE', score: 452900, winRate: 64, roundsPlayed: 461, streak: 9 },
-  ],
-}
+const passwordResetLifetimeMs = 1000 * 60 * 30
+const passwordResetSecret =
+  process.env.PASSWORD_RESET_SECRET?.trim() ||
+  process.env.SESSION_SECRET?.trim() ||
+  mapsApiKey ||
+  'development-reset-secret'
+const smtpUrl = process.env.SMTP_URL?.trim() || ''
+const smtpHost = process.env.SMTP_HOST?.trim() || ''
+const smtpPort = Number(process.env.SMTP_PORT ?? 587)
+const smtpUser = process.env.SMTP_USER?.trim() || ''
+const smtpPass = process.env.SMTP_PASS?.trim() || ''
+const smtpFrom = process.env.SMTP_FROM?.trim() || ''
+const smtpSecure = String(process.env.SMTP_SECURE ?? '').trim().toLowerCase() === 'true'
+const mailTransporter =
+  smtpUrl || smtpHost
+    ? nodemailer.createTransport(
+        smtpUrl
+          ? smtpUrl
+          : {
+              host: smtpHost,
+              port: smtpPort,
+              secure: smtpSecure,
+              auth: smtpUser && smtpPass ? { user: smtpUser, pass: smtpPass } : undefined,
+            },
+      )
+    : null
 
 function buildRuntimeChecks() {
   const errors = []
@@ -658,6 +653,72 @@ function verifyPassword(password, storedHash) {
   return timingSafeEqual(nextHash, currentHash)
 }
 
+function createPasswordResetToken(email) {
+  const payload = {
+    email,
+    expiresAt: Date.now() + passwordResetLifetimeMs,
+  }
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const signature = createHmac('sha256', passwordResetSecret)
+    .update(encodedPayload)
+    .digest('base64url')
+
+  return `${encodedPayload}.${signature}`
+}
+
+function verifyPasswordResetToken(token) {
+  const [encodedPayload, signature] = String(token ?? '').split('.')
+  if (!encodedPayload || !signature) {
+    return null
+  }
+
+  const expectedSignature = createHmac('sha256', passwordResetSecret)
+    .update(encodedPayload)
+    .digest('base64url')
+
+  if (expectedSignature !== signature) {
+    return null
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'))
+    if (
+      !payload ||
+      typeof payload.email !== 'string' ||
+      !payload.email ||
+      typeof payload.expiresAt !== 'number' ||
+      payload.expiresAt < Date.now()
+    ) {
+      return null
+    }
+
+    return {
+      email: normalizeEmail(payload.email),
+      expiresAt: payload.expiresAt,
+    }
+  } catch {
+    return null
+  }
+}
+
+async function sendPasswordResetEmail(email) {
+  const token = createPasswordResetToken(email)
+  const resetUrl = `${allowedOrigins.values().next().value || publicBaseUrl}/login?reset=${encodeURIComponent(token)}`
+
+  if (!mailTransporter || !smtpFrom) {
+    console.warn(`[password-reset] SMTP not configured. Reset link for ${email}: ${resetUrl}`)
+    return
+  }
+
+  await mailTransporter.sendMail({
+    from: smtpFrom,
+    to: email,
+    subject: 'Reset your Mueyyensayt password',
+    text: `Use this link to reset your password: ${resetUrl}`,
+    html: `<p>Use this link to reset your password:</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
+  })
+}
+
 function toAuthUser(user) {
   return {
     id: user.id,
@@ -1105,7 +1166,7 @@ function buildUserLeaderboardEntry(user, matches, currentUserId) {
 
   return {
     name: user.displayName,
-    country: user.id === currentUserId ? 'YOU' : 'USR',
+    country: '---',
     score: totalScore,
     winRate: Math.round((highScoreMatches / matches.length) * 100),
     roundsPlayed: totalRounds,
@@ -1415,6 +1476,75 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  if (req.method === 'POST' && req.url === '/api/auth/forgot-password') {
+    try {
+      const body = await readJsonBody(req)
+      const email = normalizeEmail(body.email)
+
+      if (!email || !emailPattern.test(email)) {
+        json(res, 400, { error: 'Enter a valid email address.' })
+        return
+      }
+
+      const user = loadUsers().find((entry) => entry.email.toLowerCase() === email)
+      if (user) {
+        await sendPasswordResetEmail(email)
+      }
+
+      json(res, 200, {
+        ok: true,
+        message: 'If that email exists, a reset link has been sent.',
+      })
+      return
+    } catch {
+      json(res, 400, { error: 'Could not send reset email.' })
+      return
+    }
+  }
+
+  if (req.method === 'POST' && req.url === '/api/auth/reset-password') {
+    try {
+      const body = await readJsonBody(req)
+      const token = String(body.token ?? '').trim()
+      const password = normalizePassword(body.password)
+
+      if (!token || !password) {
+        json(res, 400, { error: 'Token and new password are required.' })
+        return
+      }
+
+      if (password.length < 8) {
+        json(res, 400, { error: 'Password must be at least 8 characters.' })
+        return
+      }
+
+      const payload = verifyPasswordResetToken(token)
+      if (!payload) {
+        json(res, 400, { error: 'Reset link is invalid or expired.' })
+        return
+      }
+
+      const users = loadUsers()
+      const userIndex = users.findIndex((entry) => entry.email.toLowerCase() === payload.email)
+      if (userIndex === -1) {
+        json(res, 400, { error: 'Reset link is invalid or expired.' })
+        return
+      }
+
+      users[userIndex] = {
+        ...users[userIndex],
+        passwordHash: hashPassword(password),
+      }
+      saveUsers(users)
+
+      json(res, 200, { ok: true, message: 'Password updated.' })
+      return
+    } catch {
+      json(res, 400, { error: 'Could not reset password.' })
+      return
+    }
+  }
+
   if (req.method === 'POST' && req.url === '/api/auth/logout') {
     const session = getSession(req)
     if (session) {
@@ -1530,16 +1660,7 @@ const server = createServer(async (req, res) => {
       )
       .filter(Boolean)
 
-    const mergedEntries = currentUser?.isGuest
-      ? [...seededLeaderboardData[windowKey], ...userEntries]
-      : [
-          ...seededLeaderboardData[windowKey].filter(
-            (entry) => entry.name !== currentUser?.displayName,
-          ),
-          ...userEntries,
-        ]
-
-    const entries = withRanks(mergedEntries)
+    const entries = withRanks(userEntries)
     json(res, 200, { entries })
     return
   }
@@ -2141,6 +2262,43 @@ const server = createServer(async (req, res) => {
       return
     } catch {
       json(res, 400, { error: 'Could not advance match.' })
+      return
+    }
+  }
+
+  if (req.method === 'POST' && path === '/api/parties/reset') {
+    try {
+      const currentUser = requireCurrentUser(req, res)
+      if (!currentUser) {
+        return
+      }
+
+      const body = await readJsonBody(req)
+      const parties = loadParties()
+      const index = findPartyIndex(parties, body.code)
+      if (index === -1) {
+        json(res, 404, { error: 'Party not found.' })
+        return
+      }
+
+      const party = parties[index]
+      if (!party.members.some((member) => member.userId === currentUser.id)) {
+        json(res, 403, { error: 'You are not in this party.' })
+        return
+      }
+
+      if (party.activeMatch?.status !== 'finished') {
+        json(res, 409, { error: 'The match is not finished yet.' })
+        return
+      }
+
+      party.activeMatch = null
+      party.updatedAt = nowIso()
+      persistParties(parties, { party })
+      json(res, 200, { party: sanitizePartyForClient(party) })
+      return
+    } catch {
+      json(res, 400, { error: 'Could not reset party lobby.' })
       return
     }
   }

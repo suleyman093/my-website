@@ -43,6 +43,8 @@ Then open [http://localhost:8787](http://localhost:8787).
 - `COOKIE_SAME_SITE`: cookie SameSite policy, usually `Lax` or `None`
 - `COOKIE_SECURE`: `true` when cookies should require HTTPS
 - `PGSSLMODE`: use `require` in production Postgres deployments if needed
+- `PASSWORD_RESET_SECRET`: signing secret for password reset links
+- `SMTP_URL` or `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM`: SMTP config for password reset emails
 
 ## Health checks
 
@@ -73,21 +75,28 @@ Then open [http://localhost:8787](http://localhost:8787).
 
 This repo includes [render.yaml](/C:/Users/Suleyman/my-website/render.yaml) for a Render Blueprint deployment with:
 - one Node web service
-- one Render Postgres database
 - no persistent disk requirement
+- an external Postgres database supplied through `DATABASE_URL`
+
+Recommended free database options:
+- [Neon](https://neon.com/)
+- [Supabase Postgres](https://supabase.com/)
 
 Before deploying on Render:
 1. Push the repo to GitHub.
-2. In Render, create a new Blueprint from the repo.
-3. Set these secret env vars during creation:
+2. Create a free Postgres database in Neon or Supabase.
+3. Copy its connection string.
+4. In Render, create a new Blueprint from the repo.
+5. Set these env vars during creation:
+   - `DATABASE_URL`
    - `GOOGLE_MAPS_API_KEY`
    - `VITE_GOOGLE_MAPS_API_KEY`
    - `PUBLIC_BASE_URL`
    - `APP_ORIGIN`
-4. Let Render provision the `mueyyensayt-db` Postgres database and inject `DATABASE_URL` automatically.
+6. Keep `PGSSLMODE=require` in production unless your provider says otherwise.
 
 Important:
-- This is the recommended permanent storage path on Render if you do not want a persistent disk.
+- This is the recommended permanent free-storage path if you do not want a paid Render disk/database.
 - Local SQLite remains available for development and fallback.
 
 ## Docker

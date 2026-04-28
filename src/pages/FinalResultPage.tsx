@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 import { appendStoredMatchResult, loadCurrentAppState } from '../lib/auth'
 import { buildFinalMatchStateFromParty, buildGameRouteStateFromParty, buildResultRouteStateFromParty } from '../lib/matchResume'
-import { formatTeamName } from '../lib/party'
+import { formatTeamName, leaveParty, resetPartyToLobby } from '../lib/party'
 
 type FinalResultState = {
   matchId: string
@@ -21,6 +21,13 @@ type FinalResultState = {
     distanceKm: number
     score: number
     guessed: boolean
+  }[]
+  finalPlacements?: {
+    userId: string
+    displayName: string
+    team: 'red' | 'black'
+    totalScore: number
+    isCurrentUser: boolean
   }[]
 }
 
@@ -40,6 +47,7 @@ export function FinalResultPage() {
   const teamPoints = state?.teamPoints ?? null
   const partyCode = state?.partyCode ?? null
   const roundResults = state?.roundResults ?? []
+  const finalPlacements = state?.finalPlacements ?? []
   const roundsPlayed = roundResults.length || Number(roundCount)
   const guessedRounds = roundResults.filter((round) => round.guessed).length
   const averageScore =
@@ -127,7 +135,13 @@ export function FinalResultPage() {
     })
   }, [matchId, matchType, mode, partyCode, roundTime, roundsPlayed, totalScore, user])
 
-  function handlePlayAgain() {
+  async function handlePlayAgain() {
+    if (partyCode) {
+      await resetPartyToLobby(partyCode)
+      navigate('/room', { state: { partyCode } })
+      return
+    }
+
     navigate('/room', {
       state: {
         matchType,
@@ -136,6 +150,14 @@ export function FinalResultPage() {
         roundCount,
       },
     })
+  }
+
+  async function handleGoHome() {
+    if (partyCode && user) {
+      await leaveParty(partyCode, user.id)
+    }
+
+    navigate('/')
   }
 
   return (
@@ -224,19 +246,30 @@ export function FinalResultPage() {
 
             <div className="final-results-panel">
               <div className="final-results-header">
-                <span>Round</span>
-                <span>Location</span>
-                <span>Distance</span>
-                <span>Score</span>
+                <span>Rank</span>
+                <span>Player</span>
+                <span>Total score</span>
               </div>
 
               <div className="final-results-list">
-                {roundResults.map((round) => (
-                  <div key={round.roundNumber} className="final-results-row">
-                    <span>R{round.roundNumber}</span>
-                    <strong>{round.targetName}</strong>
-                    <span>{round.guessed ? `${round.distanceKm} km` : 'No guess'}</span>
-                    <span>{round.score}</span>
+                {(finalPlacements.length > 0
+                  ? finalPlacements
+                  : [
+                      {
+                        userId: user?.id ?? 'solo-user',
+                        displayName: user?.displayName ?? 'You',
+                        team: 'red' as const,
+                        totalScore,
+                        isCurrentUser: true,
+                      },
+                    ]).map((entry, index) => (
+                  <div key={entry.userId} className="final-results-row">
+                    <span>#{index + 1}</span>
+                    <strong>
+                      {entry.displayName}
+                      {entry.isCurrentUser ? ' (You)' : ''}
+                    </strong>
+                    <span>{entry.totalScore}</span>
                   </div>
                 ))}
               </div>
@@ -245,12 +278,12 @@ export function FinalResultPage() {
         )}
 
         <div className="hero-actions">
-          <button type="button" onClick={handlePlayAgain}>
+          <button type="button" onClick={() => void handlePlayAgain()}>
             Play again
           </button>
-          <Link to="/" className="button-link secondary">
+          <button type="button" className="button-link secondary" onClick={() => void handleGoHome()}>
             Home
-          </Link>
+          </button>
         </div>
       </section>
     </main>
